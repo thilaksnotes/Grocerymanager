@@ -26,7 +26,7 @@
     .form { display:grid; grid-template-columns:2fr 1fr auto; gap:10px; align-items:end; }
     .list { display:grid; gap:9px; } .item { display:flex; align-items:center; gap:12px; padding:12px; border:1px solid var(--line); border-radius:12px; background:white; }
     .item-main { flex:1; min-width:0; } .item-main strong { display:block; overflow-wrap:anywhere; } .pill { display:inline-block; border-radius:999px; padding:4px 8px; background:#eef1f4; font-size:12px; color:#46505e; }
-    .present { accent-color:var(--accent); width:19px; height:19px; } .status-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(125px,180px); gap:12px; align-items:center; width:100%; }
+    .present { accent-color:var(--accent); width:19px; height:19px; } .status-row { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(135px,190px) minmax(125px,170px); gap:12px; align-items:center; width:100%; }
     .empty { padding:24px; text-align:center; border:1px dashed #ccd3dc; border-radius:12px; color:var(--muted); background:#ffffff80; }
     .notice { padding:12px 14px; border-radius:10px; background:var(--accent-light); color:#205343; margin-bottom:14px; }
     .warning { background:var(--warn); color:#79500d; } .error { background:#f9e8e6; color:var(--danger); }
@@ -80,11 +80,10 @@
 
   <section id="page-shelves" class="section hidden">
     <div class="card">
-      <div class="row"><div><h2>Weekly shelf review</h2><div class="muted">Choose a location, update presence and expiry dates, then save.</div></div></div>
-      <label style="margin-top:14px">Storage location<select id="location-select"></select></label>
-      <div class="row" style="margin:16px 0 10px"><span id="shelf-count" class="item-count"></span><input id="shelf-search" class="search" placeholder="Search items in master list"></div>
+      <div class="row"><div><h2>Weekly shelf review</h2><div class="muted">Choose a storage location for each item, update presence and expiry dates, then save.</div></div></div>
+      <div class="row" style="margin:16px 0 10px"><span id="shelf-count" class="item-count"></span><input id="shelf-search" class="search" placeholder="Search items in master list"><button id="save-review" type="button">Save weekly report</button></div>
       <div id="shelf-list" class="list"></div>
-      <div class="row" style="margin-top:15px"><span class="muted">Unchecked means not present at this location.</span><button id="save-review">Save weekly review</button></div>
+      <div class="row" style="margin-top:15px"><span class="muted">Unchecked items appear first. Items are sorted alphabetically within each group.</span></div>
     </div>
   </section>
 
@@ -248,7 +247,6 @@
     $('restock-list').innerHTML=restock.length?restock.map(x=>restockRow(x)).join(''):'<div class="empty">No restock suggestions right now.</div>';
     $('hidden-list').innerHTML=state.data.hiddenItems.length?state.data.hiddenItems.map(x=>`<div class="item"><div class="item-main"><strong>${esc(x.name)}</strong><div class="muted">${esc(x.category||'Uncategorised')} · Hidden</div></div><button class="secondary" data-restore="${esc(x.itemId)}">Restore</button></div>`).join(''):'<div class="empty">Your Hide List is empty.</div>';
     const previousBrowseLocation=$('browse-location').value||'all';
-    $('location-select').innerHTML=state.data.locations.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
     $('browse-location').innerHTML='<option value="all">All shelves</option>'+state.data.locations.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
     $('browse-location').value=state.data.locations.includes(previousBrowseLocation)?previousBrowseLocation:'all';
     $('item-suggestions').innerHTML=state.data.items.map(x=>`<option value="${esc(x.name)}"></option>`).join('');
@@ -264,14 +262,35 @@
   }
   function renderShelf() {
     if(!state.data)return;
-    const loc=$('location-select').value||state.data.locations[0];
     const q=($('shelf-search').value||'').trim().toLowerCase();
-    const items=state.data.items.filter(x=>x.name.toLowerCase().includes(q));
-    $('shelf-count').textContent=`${items.length} item(s) · ${loc}`;
+    const items=state.data.items.filter(x=>x.name.toLowerCase().includes(q)).sort((a,b)=>{
+      const ap=presentSomewhere(a.itemId), bp=presentSomewhere(b.itemId);
+      return Number(ap)-Number(bp) || a.name.localeCompare(b.name);
+    });
+    $('shelf-count').textContent=`${items.length} item(s) · all storage locations`;
     $('shelf-list').innerHTML=items.length?items.map(item=>{
-      const s=statusFor(item.itemId,loc);
-      return `<div class="item"><div class="status-row"><label style="display:flex;align-items:center;gap:10px;color:var(--ink);font-size:15px"><input class="present" type="checkbox" data-present="${esc(item.itemId)}" ${s.present?'checked':''}><span><strong>${esc(item.name)}</strong><span class="muted" style="display:block">${esc(item.category||'Uncategorised')}</span></span></label><label>Expiry date (optional)<input class="exp-date" type="date" data-expiry="${esc(item.itemId)}" value="${esc(s.expiryDate||'')}"></label></div></div>`;
+      const savedLocation=state.data.locations.find(loc=>statusFor(item.itemId,loc).present) || state.data.locations[0];
+      const s=statusFor(item.itemId,savedLocation);
+      const opts=state.data.locations.map(loc=>`<option value="${esc(loc)}" ${loc===savedLocation?'selected':''}>${esc(loc)}</option>`).join('');
+      return `<div class="item shelf-entry" data-item-name="${esc(item.name.toLowerCase())}" data-item-id="${esc(item.itemId)}"><div class="status-row"><label style="display:flex;align-items:center;gap:10px;color:var(--ink);font-size:15px"><input class="present" type="checkbox" data-present="${esc(item.itemId)}" ${s.present?'checked':''}><span><strong>${esc(item.name)}</strong><span class="muted" style="display:block">${esc(item.category||'Uncategorised')}</span></span></label><label>Storage location<select class="entry-location" data-location-for="${esc(item.itemId)}">${opts}</select></label><label>Expiry date (optional)<input class="exp-date" type="date" data-expiry="${esc(item.itemId)}" value="${esc(s.expiryDate||'')}"></label></div></div>`;
     }).join(''):'<div class="empty">Add items to the Master List first.</div>';
+    sortShelfEntries();
+  }
+  function sortShelfEntries(){
+    const list=$('shelf-list');
+    [...list.querySelectorAll('.shelf-entry')].sort((a,b)=>{
+      const ac=a.querySelector('.present').checked, bc=b.querySelector('.present').checked;
+      return Number(ac)-Number(bc) || a.dataset.itemName.localeCompare(b.dataset.itemName);
+    }).forEach(el=>list.appendChild(el));
+  }
+  function refreshShelfEntry(itemId){
+    const row=[...document.querySelectorAll('.shelf-entry')].find(el=>el.dataset.itemId===itemId);
+    if(!row)return;
+    const loc=row.querySelector('.entry-location').value;
+    const saved=statusFor(itemId,loc);
+    row.querySelector('.present').checked=!!saved.present;
+    row.querySelector('.exp-date').value=saved.expiryDate||'';
+    sortShelfEntries();
   }
   function renderBrowse() {
     if(!state.data)return;
@@ -305,23 +324,38 @@
 
   $('browse-location').addEventListener('change',renderBrowse);
   $('browse-search').addEventListener('input',renderBrowse);
-  $('location-select').addEventListener('change',renderShelf);
   $('shelf-search').addEventListener('input',renderShelf);
   $('master-search').addEventListener('input',renderMaster);
-  $('save-review').addEventListener('click',()=>{
-    const location=$('location-select').value;
-    const entries=state.data.items.map(item=>{
-      const presentInput=document.querySelector(`[data-present="${CSS.escape(item.itemId)}"]`);
-      const expiryInput=document.querySelector(`[data-expiry="${CSS.escape(item.itemId)}"]`);
-      const saved=statusFor(item.itemId,location);
-      // If search filtering hides an item, preserve its previously saved status.
-      return {
-        itemId:item.itemId,
-        present:presentInput ? presentInput.checked : saved.present,
-        expiryDate:expiryInput ? expiryInput.value : (saved.expiryDate||'')
-      };
+  $('shelf-list').addEventListener('change',e=>{
+    const row=e.target.closest('.shelf-entry');
+    if(!row)return;
+    if(e.target.matches('.entry-location')) refreshShelfEntry(row.dataset.itemId);
+    else if(e.target.matches('.present')) sortShelfEntries();
+  });
+  $('save-review').addEventListener('click',async()=>{
+    if(!state.data || state.busy)return;
+    const draft=new Map();
+    document.querySelectorAll('.shelf-entry').forEach(row=>{
+      const id=row.dataset.itemId;
+      draft.set(id,{location:row.querySelector('.entry-location').value,present:row.querySelector('.present').checked,expiryDate:row.querySelector('.exp-date').value});
     });
-    callServer('saveLocationReview',{location,entries},`${location} review saved.`);
+    const locations=state.data.locations;
+    setBusy(true,'Preparing weekly shelf report…');
+    let savedCount=0;
+    try{
+      for(let i=0;i<locations.length;i++){
+        const location=locations[i];
+        const entries=state.data.items.map(item=>{
+          const old=statusFor(item.itemId,location);
+          const changed=draft.get(item.itemId);
+          return {itemId:item.itemId,present:changed && changed.location===location?changed.present:old.present,expiryDate:changed && changed.location===location?changed.expiryDate:(old.expiryDate||'')};
+        });
+        setLoadingStatus(`Saving shelf ${i+1} of ${locations.length}: ${location}`);
+        state.data=await apiMutate('saveLocationReview',{location,entries});
+        savedCount++;
+      }
+      renderAll();setBusy(false);notify(`Weekly report saved for all ${savedCount} storage locations. Please verify the results in My Shelves.`);
+    }catch(err){setBusy(false);renderAll();notify(`Saved ${savedCount} of ${locations.length} shelf reports before an error. ${err && err.message ? err.message : String(err)} Reload to verify before retrying.`,'error');}
   });
   let addRowCounter=0;
   function addMasterRow(name='', category='') {

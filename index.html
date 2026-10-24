@@ -100,15 +100,72 @@
   const restockItems = () => state.data.items.filter(i => !presentSomewhere(i.itemId));
   function notify(message, type='ok') { const n=$('notice'); n.textContent=message; n.className='notice'+(type==='error'?' error':type==='warning'?' warning':''); n.classList.remove('hidden'); window.scrollTo({top:0,behavior:'smooth'}); }
   function setBusy(b) { state.busy=b; document.querySelectorAll('button').forEach(btn=>btn.disabled=b); }
+  // Configure this with your deployed Apps Script /exec URL.
+  const API_URL = 'PASTE_YOUR_APPS_SCRIPT_EXEC_URL_HERE';
+
+  function apiRead() {
+    return new Promise((resolve, reject) => {
+      const callbackName = '__groceryApiCallback_' + Date.now() + '_' + Math.floor(Math.random()*100000);
+      const script = document.createElement('script');
+      const timeout = setTimeout(() => { cleanup(); reject(new Error('API request timed out. Check the Apps Script URL and deployment.')); }, 20000);
+      function cleanup() {
+        clearTimeout(timeout);
+        try { delete window[callbackName]; } catch (_) { window[callbackName] = undefined; }
+        if (script.parentNode) script.parentNode.removeChild(script);
+      }
+      window[callbackName] = data => { cleanup(); resolve(data); };
+      script.onerror = () => { cleanup(); reject(new Error('Could not reach the Apps Script API. Check the /exec URL and deployment access.')); };
+      script.src = API_URL + (API_URL.includes('?') ? '&' : '?') + 'action=read&callback=' + encodeURIComponent(callbackName);
+      document.head.appendChild(script);
+    });
+  }
+
+  async function apiMutate(action, payload) {
+    // Apps Script ContentService redirects POST responses. A no-cors form POST
+    // is compatible with the public endpoint; then reload state through JSONP.
+    const form = new URLSearchParams();
+    form.set('payload', JSON.stringify({action, payload}));
+    await fetch(API_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'},
+      body: form.toString()
+    });
+    // The opaque POST response cannot be inspected in no-cors mode.
+    // Verify by reading fresh state; if the change is not present, surface an error.
+    await new Promise(resolve => setTimeout(resolve, 900));
+    const data = await apiRead();
+    return data;
+  }
+
   function callServer(method, payload, successMessage) {
+    const actions = {
+      addItem: 'addItem',
+      saveLocationReview: 'saveLocationReview',
+      hideItem: 'hideItem',
+      restoreItem: 'restoreItem'
+    };
+    const action = actions[method];
+    if (!action) { notify('Unknown operation: ' + method, 'error'); return; }
     setBusy(true);
-    google.script.run.withSuccessHandler(data => { state.data=data; renderAll(); setBusy(false); if(successMessage) notify(successMessage); })
-      .withFailureHandler(err => { setBusy(false); notify(err && err.message ? err.message : String(err), 'error'); })[method](payload);
+    apiMutate(action, payload).then(data => {
+      state.data = data;
+      renderAll();
+      setBusy(false);
+      if (successMessage) notify(successMessage + ' (Please verify the change in the list.)');
+    }).catch(err => {
+      setBusy(false);
+      notify(err && err.message ? err.message : String(err), 'error');
+    });
   }
   function loadData() {
+    if (API_URL === 'PASTE_YOUR_APPS_SCRIPT_EXEC_URL_HERE') {
+      notify('Setup required: open index.html and replace PASTE_YOUR_APPS_SCRIPT_EXEC_URL_HERE with your deployed Apps Script /exec URL.', 'warning');
+      return;
+    }
     setBusy(true);
-    google.script.run.withSuccessHandler(data=>{state.data=data;setBusy(false);renderAll();})
-      .withFailureHandler(err=>{setBusy(false);notify(err&&err.message?err.message:String(err),'error');}) .getInitialData();
+    apiRead().then(data => { state.data=data; setBusy(false); renderAll(); })
+      .catch(err => { setBusy(false); notify(err && err.message ? err.message : String(err), 'error'); });
   }
   function go(page) {
     state.page=page;

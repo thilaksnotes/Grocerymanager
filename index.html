@@ -69,7 +69,6 @@
     <button class="tab" data-page="restock">Restock Suggestions</button>
     <button class="tab" data-page="hidden">Hide List</button>
     <button class="tab" data-page="locations">Manage Locations</button>
-    <button class="tab" data-page="locations">Manage Locations</button>
   </nav>
   <section id="page-dashboard" class="section">
     <div class="grid">
@@ -124,17 +123,6 @@
 
   <section id="page-hidden" class="section hidden">
     <div class="card"><h2>Hide List</h2><p class="muted">These items are excluded from the active Master List and restock suggestions. Restore an item if you want to track it again.</p><div id="hidden-list" class="list"></div></div>
-  </section>
-  <section id="page-locations" class="section hidden">
-    <div class="card">
-      <h2>Manage Storage Locations</h2>
-      <p class="muted">Add a new rack, cabinet, pantry or fridge location. Existing locations and records are preserved.</p>
-      <form id="location-form" class="form" style="grid-template-columns:2fr auto; margin-top:14px">
-        <label>New storage location<input id="new-location-name" maxlength="60" placeholder="e.g. Kitchen Drawer" required></label>
-        <button id="add-location-btn" type="submit">Add location</button>
-      </form>
-      <div id="location-list" class="list" style="margin-top:14px"></div>
-    </div>
   </section>
   <section id="page-locations" class="section hidden">
     <div class="card">
@@ -278,12 +266,12 @@
     const expired=allExpiry.filter(x=>x.days<0).sort((a,b)=>a.days-b.days);
     const expiry=allExpiry.filter(x=>x.days>=0 && x.days<=30).sort((a,b)=>a.days-b.days);
     const restock=restockItems();
-    $('metric-present').textContent=state.data.items.filter(presentSomewhere).length;
-    $('metric-expiry').textContent=expiry.length;
+    $('metric-soon').textContent=expiry.filter(x=>x.days<=10).length;
+    $('metric-expired').textContent=expired.length;
     $('metric-restock').textContent=restock.length;
+    $('metric-review').textContent=state.data.locations.length;
     $('dashboard-expired').innerHTML=expired.length?expired.slice(0,10).map(expiryRow).join(''):'<div class="empty">No expired items.</div>';
     $('dashboard-expiry').innerHTML=expiry.length?expiry.slice(0,10).map(expiryRow).join(''):'<div class="empty">No upcoming expiries in the next 30 days.</div>';
-    $('location-list').innerHTML=state.data.locations.map(loc=>`<div class="item"><div class="item-main"><strong>${esc(loc)}</strong><div class="muted">Active storage location</div></div></div>`).join('');
     $('location-list').innerHTML=state.data.locations.map(loc=>`<div class="item"><div class="item-main"><strong>${esc(loc)}</strong><div class="muted">Active storage location</div></div></div>`).join('');
     $('dashboard-restock').innerHTML=restock.length?restock.slice(0,5).map(x=>restockRow(x,true)).join(''):'<div class="empty">No restock suggestions right now.</div>';
     $('restock-list').innerHTML=restock.length?restock.map(x=>restockRow(x)).join(''):'<div class="empty">No restock suggestions right now.</div>';

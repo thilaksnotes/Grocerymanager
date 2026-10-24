@@ -396,36 +396,35 @@
       expiryDate:row.querySelector('[data-new-expiry]').value
     })).filter(row=>row.name);
     if(!rows.length){notify('Enter at least one grocery item before saving.','warning');return;}
+
     const seen=new Set([...state.data.items,...state.data.hiddenItems].map(x=>x.name.trim().toLowerCase()));
     const toSave=[], skipped=[];
     for(const row of rows){
       const key=row.name.toLowerCase();
       if(seen.has(key)){skipped.push(row.name);continue;}
-      seen.add(key); toSave.push(row);
+      seen.add(key);
+      toSave.push(row);
     }
     if(!toSave.length){notify('No new items to save. All entered names already exist in the active Master List or are duplicated in this batch.','warning');return;}
-    setBusy(true, `Saving item 1 of ${toSave.length}…`);
-    let saved=0;
+
+    setBusy(true,`Saving ${toSave.length} item${toSave.length===1?'':'s'} in one batch…`);
+    setLoadingStatus(`Sending one batch request for ${toSave.length} item${toSave.length===1?'':'s'}…`);
     try {
-      for(let i=0;i<toSave.length;i++){
-        setLoadingStatus(`Saving item ${i+1} of ${toSave.length}: ${toSave[i].name}`);
-        const entry=toSave[i];
-        state.data=await apiMutate('addItem',{name:entry.name});
-        const created=state.data.items.find(item=>item.name.trim().toLowerCase()===entry.name.trim().toLowerCase());
-        if(!created) throw new Error(`Item '${entry.name}' was added but could not be found in the refreshed Master List. Reload to verify.`);
-        state.data=await apiMutate('saveLocationReview',{location:entry.location,entries:[{itemId:created.itemId,present:true,expiryDate:entry.expiryDate||''}]});
-        saved++;
-      }
+      state.data=await apiMutate('addItems',{items:toSave});
+      const savedKeys=new Set(state.data.items.map(item=>item.name.trim().toLowerCase()));
+      const missing=toSave.filter(item=>!savedKeys.has(item.name.trim().toLowerCase())).map(item=>item.name);
+      if(missing.length) throw new Error('Some items were not confirmed after saving: '+missing.join(', ')+'. Please verify the Master List before retrying.');
       renderAll();
-      $('add-rows').innerHTML=''; addMasterRow();
+      $('add-rows').innerHTML='';
+      addMasterRow();
       setBusy(false);
-      let message=`Saved ${saved} item${saved===1?'':'s'} to the Master List.`;
+      let message=`Saved ${toSave.length} item${toSave.length===1?'':'s'} in one batch.`;
       if(skipped.length)message+=` Skipped ${skipped.length} existing/duplicate item${skipped.length===1?'':'s'}: ${skipped.join(', ')}.`;
       notify(message);
     } catch(err) {
       setBusy(false);
       renderAll();
-      notify(`Saved ${saved} of ${toSave.length} new items before an error. ${err && err.message ? err.message : String(err)} Please reload to verify the saved items before retrying.`,'error');
+      notify(`Batch save could not be fully confirmed. ${err && err.message ? err.message : String(err)} Check the Master List before retrying to avoid duplicates.`,'error');
     }
   });
   $('loading-retry').addEventListener('click',loadData);

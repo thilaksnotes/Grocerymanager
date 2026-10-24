@@ -31,11 +31,29 @@
     .notice { padding:12px 14px; border-radius:10px; background:var(--accent-light); color:#205343; margin-bottom:14px; }
     .warning { background:var(--warn); color:#79500d; } .error { background:#f9e8e6; color:var(--danger); }
     .hidden { display:none !important; } .actions { display:flex; gap:8px; align-items:center; } .search { max-width:400px; }
+    .add-row { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto; gap:10px; align-items:end; padding:12px; border:1px solid var(--line); border-radius:12px; background:#fff; }
+    .add-rows { display:grid; gap:10px; margin-top:12px; }
+    .plus-btn { min-width:42px; font-size:21px; line-height:1; padding:9px 13px; }
+    .loading-overlay { position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center; padding:20px; background:rgba(16,32,28,.68); }
+    .loading-panel { width:min(420px,100%); background:white; border-radius:18px; padding:28px 24px; text-align:center; box-shadow:0 20px 70px #0003; }
+    .spinner { width:42px; height:42px; margin:0 auto 16px; border:4px solid #dce9e3; border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
+    .spinner.stopped { animation:none; border-color:#dce9e3; border-top-color:var(--danger); }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    #loading-title { font-size:18px; font-weight:750; margin-bottom:6px; } #loading-status { color:var(--muted); font-size:14px; overflow-wrap:anywhere; }
+    @media (max-width:700px) { .add-row { grid-template-columns:1fr; } .add-row .row-actions { justify-content:flex-end; } }
     .exp-date { max-width:190px; } .item-count { color:var(--muted); font-size:13px; }
     @media (max-width:700px) { main { padding:13px; } .grid { grid-template-columns:1fr; } .form { grid-template-columns:1fr; } .status-row { grid-template-columns:1fr; } .item { align-items:flex-start; } .item .actions { flex-direction:column; } header { padding:18px; } }
   </style>
 </head>
 <body>
+<div id="loading-overlay" class="loading-overlay" role="status" aria-live="polite">
+  <div class="loading-panel">
+    <div id="loading-spinner" class="spinner"></div>
+    <div id="loading-title">Loading Grocery Shelf Manager</div>
+    <div id="loading-status">Connecting to your Google Sheets data…</div>
+    <button id="loading-retry" class="secondary hidden" style="margin-top:16px" type="button">Try again</button>
+  </div>
+</div>
 <header>
   <h1>Grocery Shelf Manager</h1>
   <p>Seven storage locations · Weekly presence check · Simple restock list</p>
@@ -85,13 +103,13 @@
 
   <section id="page-master" class="section hidden">
     <div class="card">
-      <h2>Add to Master List</h2>
-      <form id="add-form" class="form">
-        <label>Grocery item name<input id="new-name" list="item-suggestions" required maxlength="120" placeholder="e.g. Toor dal" autocomplete="off"><datalist id="item-suggestions"></datalist></label>
-        <label>Category (optional)<input id="new-category" maxlength="80" placeholder="e.g. Pulses"></label>
-        <button type="submit">Add item</button>
+      <div class="row"><div><h2>Add to Master List</h2><p class="muted" style="margin:0">Add several groceries, then save them together.</p></div><button id="add-row-btn" class="plus-btn" type="button" aria-label="Add another item row" title="Add another item row">+</button></div>
+      <form id="add-form">
+        <datalist id="item-suggestions"></datalist>
+        <div id="add-rows" class="add-rows"></div>
+        <div class="row" style="margin-top:14px"><span id="add-row-hint" class="muted">1 item row</span><button id="save-all-items" type="submit">Save all items</button></div>
       </form>
-      <p class="muted">Suggestions come from your active Master List. Hidden items are kept separate and cannot be added as duplicates.</p>
+      <p class="muted" style="margin-bottom:0">Suggestions come from your active Master List. Existing items and duplicate names in this batch will be skipped.</p>
     </div>
     <div class="card"><div class="row"><h2>Active Master List</h2><input id="master-search" class="search" placeholder="Search items"></div><div id="master-list" class="list" style="margin-top:12px"></div></div>
   </section>
@@ -113,7 +131,21 @@
   const presentSomewhere = id => state.data.statuses.some(s => s.itemId === id && s.present);
   const restockItems = () => state.data.items.filter(i => !presentSomewhere(i.itemId));
   function notify(message, type='ok') { const n=$('notice'); n.textContent=message; n.className='notice'+(type==='error'?' error':type==='warning'?' warning':''); n.classList.remove('hidden'); window.scrollTo({top:0,behavior:'smooth'}); }
-  function setBusy(b) { state.busy=b; document.querySelectorAll('button').forEach(btn=>btn.disabled=b); }
+  function setBusy(b, status='Working…') {
+    state.busy=b;
+    document.querySelectorAll('button').forEach(btn=>btn.disabled=b);
+    if (b) showLoading('Please wait', status);
+    else hideLoading();
+  }
+  function showLoading(title, status, error=false) {
+    $('loading-title').textContent=title;
+    $('loading-status').textContent=status;
+    $('loading-spinner').classList.toggle('stopped',error);
+    $('loading-retry').classList.toggle('hidden',!error);
+    $('loading-overlay').classList.remove('hidden');
+  }
+  function hideLoading() { $('loading-overlay').classList.add('hidden'); }
+  function setLoadingStatus(status) { $('loading-status').textContent=status; }
   // Configure this with your deployed Apps Script /exec URL.
   const API_URL = 'https://script.google.com/macros/s/AKfycbwv7Fj6iw2J3hdZvczooxwuF36tyAMzfcV2zshP-Yb-fkzHb0ThDe_XntXlnFkTybM0/exec';
 
@@ -161,7 +193,7 @@
     };
     const action = actions[method];
     if (!action) { notify('Unknown operation: ' + method, 'error'); return; }
-    setBusy(true);
+    setBusy(true, successMessage ? 'Saving your changes to Google Sheets…' : 'Updating your grocery list…');
     apiMutate(action, payload).then(data => {
       state.data = data;
       renderAll();
@@ -174,12 +206,12 @@
   }
   function loadData() {
     if (API_URL === 'PASTE_YOUR_APPS_SCRIPT_EXEC_URL_HERE') {
-      notify('Setup required: open index.html and replace PASTE_YOUR_APPS_SCRIPT_EXEC_URL_HERE with your deployed Apps Script /exec URL.', 'warning');
+      showLoading('Setup required', 'Open index.html and replace the API_URL placeholder with your deployed Apps Script /exec URL.', true);
       return;
     }
-    setBusy(true);
-    apiRead().then(data => { state.data=data; setBusy(false); renderAll(); })
-      .catch(err => { setBusy(false); notify(err && err.message ? err.message : String(err), 'error'); });
+    setBusy(true, 'Connecting to Google Sheets and loading your grocery list…');
+    apiRead().then(data => { state.data=data; renderAll(); setBusy(false); })
+      .catch(err => { setBusy(false); showLoading('Could not load your data', err && err.message ? err.message : String(err), true); });
   }
   function go(page) {
     state.page=page;
@@ -291,14 +323,72 @@
     });
     callServer('saveLocationReview',{location,entries},`${location} review saved.`);
   });
-  $('add-form').addEventListener('submit',e=>{
-    e.preventDefault();
-    const name=$('new-name').value.trim(), category=$('new-category').value.trim();
-    const existing=state.data.items.find(x=>x.name.toLowerCase()===name.toLowerCase());
-    if(existing){notify('This item already exists in the Master List. Select it from the suggestions instead.','warning');return;}
-    callServer('addItem',{name,category},'Item added to Master List.');
-    $('add-form').reset();
+  let addRowCounter=0;
+  function addMasterRow(name='', category='') {
+    const id=++addRowCounter;
+    const row=document.createElement('div');
+    row.className='add-row'; row.dataset.addRow=String(id);
+    row.innerHTML=`<label>Grocery item name<input data-new-name="${id}" list="item-suggestions" maxlength="120" placeholder="e.g. Toor dal" autocomplete="off" value="${esc(name)}"></label>
+      <label>Category (optional)<input data-new-category="${id}" maxlength="80" placeholder="e.g. Pulses" value="${esc(category)}"></label>
+      <div class="row-actions"><button type="button" class="secondary" data-remove-row="${id}" aria-label="Remove this row" title="Remove row">Remove</button></div>`;
+    $('add-rows').appendChild(row);
+    row.querySelector(`[data-new-name="${id}"]`).focus();
+    updateAddRowCount();
+  }
+  function updateAddRowCount() {
+    const count=$('add-rows').querySelectorAll('.add-row').length;
+    $('add-row-hint').textContent=`${count} item row${count===1?'':'s'}`;
+  }
+  $('add-row-btn').addEventListener('click',()=>addMasterRow());
+  $('add-rows').addEventListener('click',e=>{
+    const button=e.target.closest('[data-remove-row]');
+    if(!button)return;
+    const rows=$('add-rows').querySelectorAll('.add-row');
+    if(rows.length===1){
+      const row=button.closest('.add-row');
+      row.querySelector('input[data-new-name]').value='';
+      row.querySelector('input[data-new-category]').value='';
+    } else button.closest('.add-row').remove();
+    updateAddRowCount();
   });
+  $('add-form').addEventListener('submit',async e=>{
+    e.preventDefault();
+    if(!state.data || state.busy)return;
+    const rows=[...$('add-rows').querySelectorAll('.add-row')].map(row=>({
+      name:row.querySelector('[data-new-name]').value.trim(),
+      category:row.querySelector('[data-new-category]').value.trim()
+    })).filter(row=>row.name);
+    if(!rows.length){notify('Enter at least one grocery item before saving.','warning');return;}
+    const seen=new Set([...state.data.items,...state.data.hiddenItems].map(x=>x.name.trim().toLowerCase()));
+    const toSave=[], skipped=[];
+    for(const row of rows){
+      const key=row.name.toLowerCase();
+      if(seen.has(key)){skipped.push(row.name);continue;}
+      seen.add(key); toSave.push(row);
+    }
+    if(!toSave.length){notify('No new items to save. All entered names already exist in the active Master List or are duplicated in this batch.','warning');return;}
+    setBusy(true, `Saving item 1 of ${toSave.length}…`);
+    let saved=0;
+    try {
+      for(let i=0;i<toSave.length;i++){
+        setLoadingStatus(`Saving item ${i+1} of ${toSave.length}: ${toSave[i].name}`);
+        state.data=await apiMutate('addItem',toSave[i]);
+        saved++;
+      }
+      renderAll();
+      $('add-rows').innerHTML=''; addMasterRow();
+      setBusy(false);
+      let message=`Saved ${saved} item${saved===1?'':'s'} to the Master List.`;
+      if(skipped.length)message+=` Skipped ${skipped.length} existing/duplicate item${skipped.length===1?'':'s'}: ${skipped.join(', ')}.`;
+      notify(message);
+    } catch(err) {
+      setBusy(false);
+      renderAll();
+      notify(`Saved ${saved} of ${toSave.length} new items before an error. ${err && err.message ? err.message : String(err)} Please reload to verify the saved items before retrying.`,'error');
+    }
+  });
+  $('loading-retry').addEventListener('click',loadData);
+  addMasterRow();
   loadData();
 </script>
 </body>

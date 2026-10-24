@@ -45,6 +45,7 @@
   <nav id="tabs">
     <button class="tab active" data-page="dashboard">Dashboard</button>
     <button class="tab" data-page="shelves">My Shelves</button>
+    <button class="tab" data-page="browse">Present Items</button>
     <button class="tab" data-page="master">Master List</button>
     <button class="tab" data-page="restock">Restock Suggestions</button>
     <button class="tab" data-page="hidden">Hide List</button>
@@ -66,6 +67,19 @@
       <div class="row" style="margin:16px 0 10px"><span id="shelf-count" class="item-count"></span><input id="shelf-search" class="search" placeholder="Search items in master list"></div>
       <div id="shelf-list" class="list"></div>
       <div class="row" style="margin-top:15px"><span class="muted">Unchecked means not present at this location.</span><button id="save-review">Save weekly review</button></div>
+    </div>
+  </section>
+
+  <section id="page-browse" class="section hidden">
+    <div class="card">
+      <h2>Present Items by Shelf</h2>
+      <p class="muted">Read-only view of items marked present. Choose one shelf or All to search every storage location.</p>
+      <div class="form" style="grid-template-columns:1fr 2fr; margin-top:14px">
+        <label>Storage location<select id="browse-location"><option value="all">All shelves</option></select></label>
+        <label>Search item<input id="browse-search" placeholder="Search grocery item name" autocomplete="off"></label>
+      </div>
+      <div class="row" style="margin:14px 0 10px"><span id="browse-count" class="item-count"></span></div>
+      <div id="browse-list" class="list"></div>
     </div>
   </section>
 
@@ -172,6 +186,7 @@
     document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.page===page));
     document.querySelectorAll('main > section').forEach(s=>s.classList.toggle('hidden',s.id!=='page-'+page));
     if(page==='shelves') renderShelf();
+    if(page==='browse') renderBrowse();
     if(page==='master') renderMaster();
   }
   document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>go(b.dataset.page)));
@@ -200,9 +215,12 @@
     $('dashboard-restock').innerHTML=restock.length?restock.slice(0,5).map(x=>restockRow(x,true)).join(''):'<div class="empty">No restock suggestions right now.</div>';
     $('restock-list').innerHTML=restock.length?restock.map(x=>restockRow(x)).join(''):'<div class="empty">No restock suggestions right now.</div>';
     $('hidden-list').innerHTML=state.data.hiddenItems.length?state.data.hiddenItems.map(x=>`<div class="item"><div class="item-main"><strong>${esc(x.name)}</strong><div class="muted">${esc(x.category||'Uncategorised')} · Hidden</div></div><button class="secondary" data-restore="${esc(x.itemId)}">Restore</button></div>`).join(''):'<div class="empty">Your Hide List is empty.</div>';
+    const previousBrowseLocation=$('browse-location').value||'all';
     $('location-select').innerHTML=state.data.locations.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
+    $('browse-location').innerHTML='<option value="all">All shelves</option>'+state.data.locations.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
+    $('browse-location').value=state.data.locations.includes(previousBrowseLocation)?previousBrowseLocation:'all';
     $('item-suggestions').innerHTML=state.data.items.map(x=>`<option value="${esc(x.name)}"></option>`).join('');
-    renderMaster(); renderShelf();
+    renderMaster(); renderShelf(); renderBrowse();
     document.querySelectorAll('[data-hide]').forEach(b=>b.onclick=()=>{if(confirm('Move this item from the Master List to the Hide List?')) callServer('hideItem',b.dataset.hide,'Item moved to Hide List.');});
     document.querySelectorAll('[data-restore]').forEach(b=>b.onclick=()=>{if(confirm('Restore this item to the active Master List?')) callServer('restoreItem',b.dataset.restore,'Item restored to Master List.');});
   }
@@ -223,6 +241,38 @@
       return `<div class="item"><div class="status-row"><label style="display:flex;align-items:center;gap:10px;color:var(--ink);font-size:15px"><input class="present" type="checkbox" data-present="${esc(item.itemId)}" ${s.present?'checked':''}><span><strong>${esc(item.name)}</strong><span class="muted" style="display:block">${esc(item.category||'Uncategorised')}</span></span></label><label>Expiry date (optional)<input class="exp-date" type="date" data-expiry="${esc(item.itemId)}" value="${esc(s.expiryDate||'')}"></label></div></div>`;
     }).join(''):'<div class="empty">Add items to the Master List first.</div>';
   }
+  function renderBrowse() {
+    if(!state.data)return;
+    const selected=$('browse-location').value||'all';
+    const q=($('browse-search').value||'').trim().toLowerCase();
+    const itemsById=new Map(state.data.items.map(item=>[item.itemId,item]));
+    const rows=state.data.statuses.filter(status=>status.present && (selected==='all'||status.location===selected))
+      .map(status=>{
+        const item=itemsById.get(status.itemId);
+        if(!item || !item.name.toLowerCase().includes(q)) return null;
+        let days=null;
+        if(status.expiryDate){
+          const today=new Date(); today.setHours(0,0,0,0);
+          const expiry=new Date(status.expiryDate+'T00:00:00');
+          days=Math.round((expiry-today)/86400000);
+        }
+        return {name:item.name,category:item.category||'Uncategorised',location:status.location,expiryDate:status.expiryDate||'',days};
+      }).filter(Boolean).sort((a,b)=>a.name.localeCompare(b.name)||a.location.localeCompare(b.location));
+    $('browse-count').textContent=`${rows.length} present item location(s)${selected==='all'?' · All shelves':' · '+selected}`;
+    $('browse-list').innerHTML=rows.length?rows.map(row=>{
+      let expiryLabel='No expiry date';
+      let expiryClass='';
+      if(row.days!==null){
+        if(row.days<0){expiryLabel=`Expired ${Math.abs(row.days)} day(s) ago`;expiryClass='warning';}
+        else if(row.days===0){expiryLabel='Expires today';expiryClass='warning';}
+        else expiryLabel=`${row.days} day(s) remaining`;
+      }
+      return `<div class="item"><div class="item-main"><strong>${esc(row.name)}</strong><div class="muted">${esc(row.category)} · <strong>${esc(row.location)}</strong></div></div><span class="pill ${expiryClass}">${esc(expiryLabel)}</span></div>`;
+    }).join(''):'<div class="empty">No present items match this shelf and search.</div>';
+  }
+
+  $('browse-location').addEventListener('change',renderBrowse);
+  $('browse-search').addEventListener('input',renderBrowse);
   $('location-select').addEventListener('change',renderShelf);
   $('shelf-search').addEventListener('input',renderShelf);
   $('master-search').addEventListener('input',renderMaster);

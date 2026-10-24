@@ -101,7 +101,7 @@
   function notify(message, type='ok') { const n=$('notice'); n.textContent=message; n.className='notice'+(type==='error'?' error':type==='warning'?' warning':''); n.classList.remove('hidden'); window.scrollTo({top:0,behavior:'smooth'}); }
   function setBusy(b) { state.busy=b; document.querySelectorAll('button').forEach(btn=>btn.disabled=b); }
   // Configure this with your deployed Apps Script /exec URL.
-  const API_URL = 'PASTE_YOUR_APPS_SCRIPT_EXEC_URL_HERE';
+  const API_URL = 'https://script.google.com/macros/s/AKfycbwv7Fj6iw2J3hdZvczooxwuF36tyAMzfcV2zshP-Yb-fkzHb0ThDe_XntXlnFkTybM0/exec';
 
   function apiRead() {
     return new Promise((resolve, reject) => {

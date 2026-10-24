@@ -31,7 +31,7 @@
     .notice { padding:12px 14px; border-radius:10px; background:var(--accent-light); color:#205343; margin-bottom:14px; }
     .warning { background:var(--warn); color:#79500d; } .error { background:#f9e8e6; color:var(--danger); }
     .hidden { display:none !important; } .actions { display:flex; gap:8px; align-items:center; } .search { max-width:400px; }
-    .add-row { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto; gap:10px; align-items:end; padding:12px; border:1px solid var(--line); border-radius:12px; background:#fff; }
+    .add-row { display:grid; grid-template-columns:minmax(0,2fr) minmax(145px,1fr) minmax(145px,1fr) auto; gap:10px; align-items:end; padding:12px; border:1px solid var(--line); border-radius:12px; background:#fff; }
     .add-rows { display:grid; gap:10px; margin-top:12px; }
     .plus-btn { min-width:42px; font-size:21px; line-height:1; padding:9px 13px; }
     .loading-overlay { position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center; padding:20px; background:rgba(16,32,28,.68); }
@@ -108,7 +108,7 @@
         <div id="add-rows" class="add-rows"></div>
         <div class="row" style="margin-top:14px"><span id="add-row-hint" class="muted">1 item row</span><button id="save-all-items" type="submit">Save all items</button></div>
       </form>
-      <p class="muted" style="margin-bottom:0">Suggestions come from your active Master List. Existing items and duplicate names in this batch will be skipped.</p>
+      <p class="muted" style="margin-bottom:0">Choose a shelf and optional expiry date for each item. New items are marked present on the selected shelf. Existing items and duplicate names in this batch will be skipped.</p>
     </div>
     <div class="card"><div class="row"><h2>Active Master List</h2><input id="master-search" class="search" placeholder="Search items"></div><div id="master-list" class="list" style="margin-top:12px"></div></div>
   </section>
@@ -234,7 +234,7 @@
     return `<div class="item"><div class="item-main"><strong>${esc(x.name)}</strong><div class="muted">${esc(x.location)} · ${esc(x.expiryDate)}</div></div><span class="pill ${x.days<0?'warning':''}">${esc(label)}</span></div>`;
   }
   function restockRow(item, compact=false) {
-    return `<div class="item"><div class="item-main"><strong>${esc(item.name)}</strong><div class="muted">${esc(item.category||'Uncategorised')} · Not present in any location</div></div><button class="danger" data-hide="${esc(item.itemId)}">${compact?'Hide':'Hide item'}</button></div>`;
+    return `<div class="item"><div class="item-main"><strong>${esc(item.name)}</strong><div class="muted">Not present in any location</div></div><button class="danger" data-hide="${esc(item.itemId)}">${compact?'Hide':'Hide item'}</button></div>`;
   }
   function renderAll() {
     if(!state.data)return;
@@ -245,7 +245,7 @@
     $('dashboard-expiry').innerHTML=expiry.length?expiry.slice(0,5).map(expiryRow).join(''):'<div class="empty">No upcoming expiries in the next 30 days.</div>';
     $('dashboard-restock').innerHTML=restock.length?restock.slice(0,5).map(x=>restockRow(x,true)).join(''):'<div class="empty">No restock suggestions right now.</div>';
     $('restock-list').innerHTML=restock.length?restock.map(x=>restockRow(x)).join(''):'<div class="empty">No restock suggestions right now.</div>';
-    $('hidden-list').innerHTML=state.data.hiddenItems.length?state.data.hiddenItems.map(x=>`<div class="item"><div class="item-main"><strong>${esc(x.name)}</strong><div class="muted">${esc(x.category||'Uncategorised')} · Hidden</div></div><button class="secondary" data-restore="${esc(x.itemId)}">Restore</button></div>`).join(''):'<div class="empty">Your Hide List is empty.</div>';
+    $('hidden-list').innerHTML=state.data.hiddenItems.length?state.data.hiddenItems.map(x=>`<div class="item"><div class="item-main"><strong>${esc(x.name)}</strong><div class="muted">Hidden</div></div><button class="secondary" data-restore="${esc(x.itemId)}">Restore</button></div>`).join(''):'<div class="empty">Your Hide List is empty.</div>';
     const previousBrowseLocation=$('browse-location').value||'all';
     $('browse-location').innerHTML='<option value="all">All shelves</option>'+state.data.locations.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
     $('browse-location').value=state.data.locations.includes(previousBrowseLocation)?previousBrowseLocation:'all';
@@ -258,7 +258,7 @@
     if(!state.data)return;
     const q=($('master-search').value||'').trim().toLowerCase();
     const items=state.data.items.filter(x=>x.name.toLowerCase().includes(q));
-    $('master-list').innerHTML=items.length?items.map(x=>`<div class="item"><div class="item-main"><strong>${esc(x.name)}</strong><div class="muted">${esc(x.category||'Uncategorised')}</div></div><span class="pill">${presentSomewhere(x.itemId)?'Present':'Needs restock'}</span></div>`).join(''):'<div class="empty">No matching active items.</div>';
+    $('master-list').innerHTML=items.length?items.map(x=>`<div class="item"><div class="item-main"><strong>${esc(x.name)}</strong></div><span class="pill">${presentSomewhere(x.itemId)?'Present':'Needs restock'}</span></div>`).join(''):'<div class="empty">No matching active items.</div>';
   }
   function renderShelf() {
     if(!state.data)return;
@@ -272,7 +272,7 @@
       const savedLocation=state.data.locations.find(loc=>statusFor(item.itemId,loc).present) || state.data.locations[0];
       const s=statusFor(item.itemId,savedLocation);
       const opts=state.data.locations.map(loc=>`<option value="${esc(loc)}" ${loc===savedLocation?'selected':''}>${esc(loc)}</option>`).join('');
-      return `<div class="item shelf-entry" data-item-name="${esc(item.name.toLowerCase())}" data-item-id="${esc(item.itemId)}"><div class="status-row"><label style="display:flex;align-items:center;gap:10px;color:var(--ink);font-size:15px"><input class="present" type="checkbox" data-present="${esc(item.itemId)}" ${s.present?'checked':''}><span><strong>${esc(item.name)}</strong><span class="muted" style="display:block">${esc(item.category||'Uncategorised')}</span></span></label><label>Storage location<select class="entry-location" data-location-for="${esc(item.itemId)}">${opts}</select></label><label>Expiry date (optional)<input class="exp-date" type="date" data-expiry="${esc(item.itemId)}" value="${esc(s.expiryDate||'')}"></label></div></div>`;
+      return `<div class="item shelf-entry" data-item-name="${esc(item.name.toLowerCase())}" data-item-id="${esc(item.itemId)}"><div class="status-row"><label style="display:flex;align-items:center;gap:10px;color:var(--ink);font-size:15px"><input class="present" type="checkbox" data-present="${esc(item.itemId)}" ${s.present?'checked':''}><span><strong>${esc(item.name)}</strong></span></label><label>Storage location<select class="entry-location" data-location-for="${esc(item.itemId)}">${opts}</select></label><label>Expiry date (optional)<input class="exp-date" type="date" data-expiry="${esc(item.itemId)}" value="${esc(s.expiryDate||'')}"></label></div></div>`;
     }).join(''):'<div class="empty">Add items to the Master List first.</div>';
     sortShelfEntries();
   }
@@ -307,7 +307,7 @@
           const expiry=new Date(status.expiryDate+'T00:00:00');
           days=Math.round((expiry-today)/86400000);
         }
-        return {name:item.name,category:item.category||'Uncategorised',location:status.location,expiryDate:status.expiryDate||'',days};
+        return {name:item.name,location:status.location,expiryDate:status.expiryDate||'',days};
       }).filter(Boolean).sort((a,b)=>a.name.localeCompare(b.name)||a.location.localeCompare(b.location));
     $('browse-count').textContent=`${rows.length} present item location(s)${selected==='all'?' · All shelves':' · '+selected}`;
     $('browse-list').innerHTML=rows.length?rows.map(row=>{
@@ -318,7 +318,7 @@
         else if(row.days===0){expiryLabel='Expires today';expiryClass='warning';}
         else expiryLabel=`${row.days} day(s) remaining`;
       }
-      return `<div class="item"><div class="item-main"><strong>${esc(row.name)}</strong><div class="muted">${esc(row.category)} · <strong>${esc(row.location)}</strong></div></div><span class="pill ${expiryClass}">${esc(expiryLabel)}</span></div>`;
+      return `<div class="item"><div class="item-main"><strong>${esc(row.name)}</strong><div class="muted"><strong>${esc(row.location)}</strong></div></div><span class="pill ${expiryClass}">${esc(expiryLabel)}</span></div>`;
     }).join(''):'<div class="empty">No present items match this shelf and search.</div>';
   }
 
@@ -358,12 +358,13 @@
     }catch(err){setBusy(false);renderAll();notify(`Saved ${savedCount} of ${locations.length} shelf reports before an error. ${err && err.message ? err.message : String(err)} Reload to verify before retrying.`,'error');}
   });
   let addRowCounter=0;
-  function addMasterRow(name='', category='') {
+  function addMasterRow(name='') {
     const id=++addRowCounter;
     const row=document.createElement('div');
     row.className='add-row'; row.dataset.addRow=String(id);
     row.innerHTML=`<label>Grocery item name<input data-new-name="${id}" list="item-suggestions" maxlength="120" placeholder="e.g. Toor dal" autocomplete="off" value="${esc(name)}"></label>
-      <label>Category (optional)<input data-new-category="${id}" maxlength="80" placeholder="e.g. Pulses" value="${esc(category)}"></label>
+      <label>Storage shelf<select data-new-location="${id}">${(state.data?.locations||['Rack 1','Rack 2','Rack 3','Rack 4','Rack 5','Rack 6','Fridge']).map(loc=>`<option value="${esc(loc)}">${esc(loc)}</option>`).join('')}</select></label>
+      <label>Expiry date (optional)<input data-new-expiry="${id}" type="date"></label>
       <div class="row-actions"><button type="button" class="secondary" data-remove-row="${id}" aria-label="Remove this row" title="Remove row">Remove</button></div>`;
     $('add-rows').appendChild(row);
     row.querySelector(`[data-new-name="${id}"]`).focus();
@@ -381,7 +382,8 @@
     if(rows.length===1){
       const row=button.closest('.add-row');
       row.querySelector('input[data-new-name]').value='';
-      row.querySelector('input[data-new-category]').value='';
+      row.querySelector('input[data-new-expiry]').value='';
+      row.querySelector('select[data-new-location]').selectedIndex=0;
     } else button.closest('.add-row').remove();
     updateAddRowCount();
   });
@@ -390,7 +392,8 @@
     if(!state.data || state.busy)return;
     const rows=[...$('add-rows').querySelectorAll('.add-row')].map(row=>({
       name:row.querySelector('[data-new-name]').value.trim(),
-      category:row.querySelector('[data-new-category]').value.trim()
+      location:row.querySelector('[data-new-location]').value,
+      expiryDate:row.querySelector('[data-new-expiry]').value
     })).filter(row=>row.name);
     if(!rows.length){notify('Enter at least one grocery item before saving.','warning');return;}
     const seen=new Set([...state.data.items,...state.data.hiddenItems].map(x=>x.name.trim().toLowerCase()));
@@ -406,7 +409,11 @@
     try {
       for(let i=0;i<toSave.length;i++){
         setLoadingStatus(`Saving item ${i+1} of ${toSave.length}: ${toSave[i].name}`);
-        state.data=await apiMutate('addItem',toSave[i]);
+        const entry=toSave[i];
+        state.data=await apiMutate('addItem',{name:entry.name});
+        const created=state.data.items.find(item=>item.name.trim().toLowerCase()===entry.name.trim().toLowerCase());
+        if(!created) throw new Error(`Item '${entry.name}' was added but could not be found in the refreshed Master List. Reload to verify.`);
+        state.data=await apiMutate('saveLocationReview',{location:entry.location,entries:[{itemId:created.itemId,present:true,expiryDate:entry.expiryDate||''}]});
         saved++;
       }
       renderAll();

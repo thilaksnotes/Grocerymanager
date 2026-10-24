@@ -30,6 +30,7 @@
     .empty { padding:24px; text-align:center; border:1px dashed #ccd3dc; border-radius:12px; color:var(--muted); background:#ffffff80; }
     .notice { padding:12px 14px; border-radius:10px; background:var(--accent-light); color:#205343; margin-bottom:14px; }
     .warning { background:var(--warn); color:#79500d; } .error { background:#f9e8e6; color:var(--danger); }
+    .expiry-red { background:#f9dedd; color:#a32020; } .expiry-orange { background:#ffead7; color:#984900; } .expiry-yellow { background:#fff2b8; color:#765b00; }
     .hidden { display:none !important; } .actions { display:flex; gap:8px; align-items:center; } .search { max-width:400px; }
     .add-row { display:grid; grid-template-columns:minmax(0,2fr) minmax(145px,1fr) minmax(145px,1fr) auto; gap:10px; align-items:end; padding:12px; border:1px solid var(--line); border-radius:12px; background:#fff; }
     .add-rows { display:grid; gap:10px; margin-top:12px; }
@@ -74,7 +75,8 @@
       <div class="card"><div class="muted">Upcoming expiries</div><div id="metric-expiry" class="metric">—</div><div class="muted">Items expiring in the next 30 days</div></div>
       <div class="card"><div class="muted">Restock suggestions</div><div id="metric-restock" class="metric">—</div><div class="muted">Active items absent everywhere</div></div>
     </div>
-    <div class="card"><h2>Upcoming expiries</h2><div id="dashboard-expiry" class="list"></div></div>
+    <div class="card"><h2>Already expired items</h2><p class="muted">Top 10 expired items, starting with the longest-expired.</p><div id="dashboard-expired" class="list"></div></div>
+    <div class="card"><h2>Upcoming expiries</h2><p class="muted">Top 10 items expiring soonest. Orange: within 10 days; yellow: 11–30 days.</p><div id="dashboard-expiry" class="list"></div></div>
     <div class="card"><h2>Restock suggestions</h2><div id="dashboard-restock" class="list"></div></div>
   </section>
 
@@ -223,26 +225,34 @@
   document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>go(b.dataset.page)));
   function expiryItems() {
     const today = new Date(); today.setHours(0,0,0,0);
-    const limit = new Date(today); limit.setDate(limit.getDate()+30);
     return state.data.statuses.filter(s=>s.present && s.expiryDate).map(s=>{
-      const d=new Date(s.expiryDate+'T12:00:00'); const item=state.data.items.find(i=>i.itemId===s.itemId);
-      return item ? {...s,name:item.name,days:Math.ceil((d-today)/86400000)} : null;
-    }).filter(x=>x && x.days<=30).sort((a,b)=>a.days-b.days);
+      const d=new Date(s.expiryDate+'T12:00:00');
+      const item=state.data.items.find(i=>i.itemId===s.itemId);
+      return item ? {...s,name:item.name,days:Math.round((d-today)/86400000)} : null;
+    }).filter(Boolean);
   }
   function expiryRow(x) {
     const label=x.days<0?`Expired ${Math.abs(x.days)} day(s) ago`:x.days===0?'Expires today':`Expires in ${x.days} day(s)`;
-    return `<div class="item"><div class="item-main"><strong>${esc(x.name)}</strong><div class="muted">${esc(x.location)} · ${esc(x.expiryDate)}</div></div><span class="pill ${x.days<0?'warning':''}">${esc(label)}</span></div>`;
+    let tone='';
+    if(x.days<0) tone='expiry-red';
+    else if(x.days<=10) tone='expiry-orange';
+    else if(x.days<=30) tone='expiry-yellow';
+    return `<div class="item"><div class="item-main"><strong>${esc(x.name)}</strong><div class="muted">${esc(x.location)} · ${esc(x.expiryDate)}</div></div><span class="pill ${tone}">${esc(label)}</span></div>`;
   }
   function restockRow(item, compact=false) {
     return `<div class="item"><div class="item-main"><strong>${esc(item.name)}</strong><div class="muted">Not present in any location</div></div><button class="danger" data-hide="${esc(item.itemId)}">${compact?'Hide':'Hide item'}</button></div>`;
   }
   function renderAll() {
     if(!state.data)return;
-    const expiry=expiryItems(), restock=restockItems();
+    const allExpiry=expiryItems();
+    const expired=allExpiry.filter(x=>x.days<0).sort((a,b)=>a.days-b.days);
+    const expiry=allExpiry.filter(x=>x.days>=0 && x.days<=30).sort((a,b)=>a.days-b.days);
+    const restock=restockItems();
     $('metric-present').textContent=state.data.items.filter(presentSomewhere).length;
     $('metric-expiry').textContent=expiry.length;
     $('metric-restock').textContent=restock.length;
-    $('dashboard-expiry').innerHTML=expiry.length?expiry.slice(0,5).map(expiryRow).join(''):'<div class="empty">No upcoming expiries in the next 30 days.</div>';
+    $('dashboard-expired').innerHTML=expired.length?expired.slice(0,10).map(expiryRow).join(''):'<div class="empty">No expired items.</div>';
+    $('dashboard-expiry').innerHTML=expiry.length?expiry.slice(0,10).map(expiryRow).join(''):'<div class="empty">No upcoming expiries in the next 30 days.</div>';
     $('dashboard-restock').innerHTML=restock.length?restock.slice(0,5).map(x=>restockRow(x,true)).join(''):'<div class="empty">No restock suggestions right now.</div>';
     $('restock-list').innerHTML=restock.length?restock.map(x=>restockRow(x)).join(''):'<div class="empty">No restock suggestions right now.</div>';
     $('hidden-list').innerHTML=state.data.hiddenItems.length?state.data.hiddenItems.map(x=>`<div class="item"><div class="item-main"><strong>${esc(x.name)}</strong><div class="muted">Hidden</div></div><button class="secondary" data-restore="${esc(x.itemId)}">Restore</button></div>`).join(''):'<div class="empty">Your Hide List is empty.</div>';

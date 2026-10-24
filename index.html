@@ -68,12 +68,15 @@
     <button class="tab" data-page="master">Master List</button>
     <button class="tab" data-page="restock">Restock Suggestions</button>
     <button class="tab" data-page="hidden">Hide List</button>
+    <button class="tab" data-page="locations">Manage Locations</button>
+    <button class="tab" data-page="locations">Manage Locations</button>
   </nav>
   <section id="page-dashboard" class="section">
     <div class="grid">
-      <div class="card"><div class="muted">Items present</div><div id="metric-present" class="metric">—</div><div class="muted">Unique active items present in any location</div></div>
-      <div class="card"><div class="muted">Upcoming expiries</div><div id="metric-expiry" class="metric">—</div><div class="muted">Items expiring in the next 30 days</div></div>
-      <div class="card"><div class="muted">Restock suggestions</div><div id="metric-restock" class="metric">—</div><div class="muted">Active items absent everywhere</div></div>
+      <div class="card"><div class="muted">Expiring soon</div><div id="metric-soon" class="metric">—</div><div class="muted">Items expiring within 10 days</div></div>
+      <div class="card"><div class="muted">Already expired</div><div id="metric-expired" class="metric">—</div><div class="muted">Items past their expiry date</div></div>
+      <div class="card"><div class="muted">Shopping list</div><div id="metric-restock" class="metric">—</div><div class="muted">Items absent from all shelves</div></div>
+      <div class="card"><div class="muted">Storage locations</div><div id="metric-review" class="metric">—</div><div class="muted">Configured shelves and storage areas</div></div>
     </div>
     <div class="card"><h2>Already expired items</h2><p class="muted">Top 10 expired items, starting with the longest-expired.</p><div id="dashboard-expired" class="list"></div></div>
     <div class="card"><h2>Upcoming expiries</h2><p class="muted">Top 10 items expiring soonest. Orange: within 10 days; yellow: 11–30 days.</p><div id="dashboard-expiry" class="list"></div></div>
@@ -121,6 +124,28 @@
 
   <section id="page-hidden" class="section hidden">
     <div class="card"><h2>Hide List</h2><p class="muted">These items are excluded from the active Master List and restock suggestions. Restore an item if you want to track it again.</p><div id="hidden-list" class="list"></div></div>
+  </section>
+  <section id="page-locations" class="section hidden">
+    <div class="card">
+      <h2>Manage Storage Locations</h2>
+      <p class="muted">Add a new rack, cabinet, pantry or fridge location. Existing locations and records are preserved.</p>
+      <form id="location-form" class="form" style="grid-template-columns:2fr auto; margin-top:14px">
+        <label>New storage location<input id="new-location-name" maxlength="60" placeholder="e.g. Kitchen Drawer" required></label>
+        <button id="add-location-btn" type="submit">Add location</button>
+      </form>
+      <div id="location-list" class="list" style="margin-top:14px"></div>
+    </div>
+  </section>
+  <section id="page-locations" class="section hidden">
+    <div class="card">
+      <h2>Manage Storage Locations</h2>
+      <p class="muted">Add a new rack, cabinet, pantry or fridge location. Existing locations and records are preserved.</p>
+      <form id="location-form" class="form" style="grid-template-columns:2fr auto; margin-top:14px">
+        <label>New storage location<input id="new-location-name" maxlength="60" placeholder="e.g. Kitchen Drawer" required></label>
+        <button id="add-location-btn" type="submit">Add location</button>
+      </form>
+      <div id="location-list" class="list" style="margin-top:14px"></div>
+    </div>
   </section>
   <p class="muted" style="text-align:center;margin:22px 0">Data is stored in your connected Google Sheet.</p>
 </main>
@@ -190,7 +215,8 @@
       addItem: 'addItem',
       saveLocationReview: 'saveLocationReview',
       hideItem: 'hideItem',
-      restoreItem: 'restoreItem'
+      restoreItem: 'restoreItem',
+      addStorageLocation: 'addStorageLocation'
     };
     const action = actions[method];
     if (!action) { notify('Unknown operation: ' + method, 'error'); return; }
@@ -242,6 +268,10 @@
   function restockRow(item, compact=false) {
     return `<div class="item"><div class="item-main"><strong>${esc(item.name)}</strong><div class="muted">Not present in any location</div></div><button class="danger" data-hide="${esc(item.itemId)}">${compact?'Hide':'Hide item'}</button></div>`;
   }
+  function getReviewedLocationCount() {
+    // Count locations with at least one status record; the current API does not expose review timestamps.
+    return state.data.locations.filter(loc => state.data.statuses.some(s => s.location === loc)).length;
+  }
   function renderAll() {
     if(!state.data)return;
     const allExpiry=expiryItems();
@@ -253,6 +283,8 @@
     $('metric-restock').textContent=restock.length;
     $('dashboard-expired').innerHTML=expired.length?expired.slice(0,10).map(expiryRow).join(''):'<div class="empty">No expired items.</div>';
     $('dashboard-expiry').innerHTML=expiry.length?expiry.slice(0,10).map(expiryRow).join(''):'<div class="empty">No upcoming expiries in the next 30 days.</div>';
+    $('location-list').innerHTML=state.data.locations.map(loc=>`<div class="item"><div class="item-main"><strong>${esc(loc)}</strong><div class="muted">Active storage location</div></div></div>`).join('');
+    $('location-list').innerHTML=state.data.locations.map(loc=>`<div class="item"><div class="item-main"><strong>${esc(loc)}</strong><div class="muted">Active storage location</div></div></div>`).join('');
     $('dashboard-restock').innerHTML=restock.length?restock.slice(0,5).map(x=>restockRow(x,true)).join(''):'<div class="empty">No restock suggestions right now.</div>';
     $('restock-list').innerHTML=restock.length?restock.map(x=>restockRow(x)).join(''):'<div class="empty">No restock suggestions right now.</div>';
     $('hidden-list').innerHTML=state.data.hiddenItems.length?state.data.hiddenItems.map(x=>`<div class="item"><div class="item-main"><strong>${esc(x.name)}</strong><div class="muted">Hidden</div></div><button class="secondary" data-restore="${esc(x.itemId)}">Restore</button></div>`).join(''):'<div class="empty">Your Hide List is empty.</div>';
@@ -436,6 +468,13 @@
       renderAll();
       notify(`Batch save could not be fully confirmed. ${err && err.message ? err.message : String(err)} Check the Master List before retrying to avoid duplicates.`,'error');
     }
+  });
+  $('location-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const name=$('new-location-name').value.trim();
+    if(!name)return;
+    callServer('addStorageLocation',{name},`Storage location '${name}' added.`);
+    $('new-location-name').value='';
   });
   $('loading-retry').addEventListener('click',loadData);
   addMasterRow();

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { --bg:#f5f6f8; --card:#fff; --ink:#20252d; --muted:#697386; --line:#e5e8ee; --accent:#246b57; --accent-light:#e5f3ed; --warn:#fff0d4; --danger:#a53b36; }
+    * { box-sizing:border-box; }
+    body { margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:var(--ink); background:var(--bg); }
+    header { background:#173f35; color:white; padding:22px max(18px, calc((100% - 1100px)/2)); }
+    header h1 { font-size:23px; margin:0 0 4px; } header p { margin:0; opacity:.8; font-size:13px; }
+    main { max-width:1100px; margin:auto; padding:18px; }
+    nav { display:flex; gap:8px; overflow:auto; padding:3px 0 14px; }
+    .tab { border:1px solid var(--line); background:white; border-radius:999px; padding:10px 14px; white-space:nowrap; cursor:pointer; color:var(--ink); }
+    .tab.active { background:var(--accent); color:white; border-color:var(--accent); }
+    .grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; box-shadow:0 2px 8px #172b3d08; }
+    .metric { font-size:28px; font-weight:750; margin-top:7px; } .muted { color:var(--muted); font-size:13px; }
+    h2 { font-size:19px; margin:0 0 12px; } h3 { font-size:16px; margin:0; }
+    .section { display:grid; gap:14px; } .row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    button, input, select { font:inherit; } button { cursor:pointer; border:0; border-radius:10px; padding:10px 13px; background:var(--accent); color:white; font-weight:600; }
+    button.secondary { background:#eef1f4; color:var(--ink); } button.danger { background:#f9e8e6; color:var(--danger); } button:disabled { opacity:.5; cursor:wait; }
+    input, select { border:1px solid #d7dce4; border-radius:10px; padding:10px 11px; background:white; color:var(--ink); width:100%; min-width:0; }
+    label { display:grid; gap:5px; font-size:13px; color:var(--muted); }
+    .form { display:grid; grid-template-columns:2fr 1fr auto; gap:10px; align-items:end; }
+    .list { display:grid; gap:9px; } .item { display:flex; align-items:center; gap:12px; padding:12px; border:1px solid var(--line); border-radius:12px; background:white; }
+    .item-main { flex:1; min-width:0; } .item-main strong { display:block; overflow-wrap:anywhere; } .pill { display:inline-block; border-radius:999px; padding:4px 8px; background:#eef1f4; font-size:12px; color:#46505e; }
+    .present { accent-color:var(--accent); width:19px; height:19px; } .status-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(125px,180px); gap:12px; align-items:center; width:100%; }
+    .empty { padding:24px; text-align:center; border:1px dashed #ccd3dc; border-radius:12px; color:var(--muted); background:#ffffff80; }
+    .notice { padding:12px 14px; border-radius:10px; background:var(--accent-light); color:#205343; margin-bottom:14px; }
+    .warning { background:var(--warn); color:#79500d; } .error { background:#f9e8e6; color:var(--danger); }
+    .hidden { display:none !important; } .actions { display:flex; gap:8px; align-items:center; } .search { max-width:400px; }
+    .exp-date { max-width:190px; } .item-count { color:var(--muted); font-size:13px; }
+    @media (max-width:700px) { main { padding:13px; } .grid { grid-template-columns:1fr; } .form { grid-template-columns:1fr; } .status-row { grid-template-columns:1fr; } .item { align-items:flex-start; } .item .actions { flex-direction:column; } header { padding:18px; } }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Grocery Shelf Manager</h1>
+  <p>Seven storage locations · Weekly presence check · Simple restock list</p>
+</header>
+<main>
+  <div id="notice" class="notice hidden" role="status"></div>
+  <nav id="tabs">
+    <button class="tab active" data-page="dashboard">Dashboard</button>
+    <button class="tab" data-page="shelves">My Shelves</button>
+    <button class="tab" data-page="master">Master List</button>
+    <button class="tab" data-page="restock">Restock Suggestions</button>
+    <button class="tab" data-page="hidden">Hide List</button>
+  </nav>
+  <section id="page-dashboard" class="section">
+    <div class="grid">
+      <div class="card"><div class="muted">Items present</div><div id="metric-present" class="metric">—</div><div class="muted">Unique active items present in any location</div></div>
+      <div class="card"><div class="muted">Upcoming expiries</div><div id="metric-expiry" class="metric">—</div><div class="muted">Items expiring in the next 30 days</div></div>
+      <div class="card"><div class="muted">Restock suggestions</div><div id="metric-restock" class="metric">—</div><div class="muted">Active items absent everywhere</div></div>
+    </div>
+    <div class="card"><h2>Upcoming expiries</h2><div id="dashboard-expiry" class="list"></div></div>
+    <div class="card"><h2>Restock suggestions</h2><div id="dashboard-restock" class="list"></div></div>
+  </section>
+
+  <section id="page-shelves" class="section hidden">
+    <div class="card">
+      <div class="row"><div><h2>Weekly shelf review</h2><div class="muted">Choose a location, update presence and expiry dates, then save.</div></div></div>
+      <label style="margin-top:14px">Storage location<select id="location-select"></select></label>
+      <div class="row" style="margin:16px 0 10px"><span id="shelf-count" class="item-count"></span><input id="shelf-search" class="search" placeholder="Search items in master list"></div>
+      <div id="shelf-list" class="list"></div>
+      <div class="row" style="margin-top:15px"><span class="muted">Unchecked means not present at this location.</span><button id="save-review">Save weekly review</button></div>
+    </div>
+  </section>
+
+  <section id="page-master" class="section hidden">
+    <div class="card">
+      <h2>Add to Master List</h2>
+      <form id="add-form" class="form">
+        <label>Grocery item name<input id="new-name" list="item-suggestions" required maxlength="120" placeholder="e.g. Toor dal" autocomplete="off"><datalist id="item-suggestions"></datalist></label>
+        <label>Category (optional)<input id="new-category" maxlength="80" placeholder="e.g. Pulses"></label>
+        <button type="submit">Add item</button>
+      </form>
+      <p class="muted">Suggestions come from your active Master List. Hidden items are kept separate and cannot be added as duplicates.</p>
+    </div>
+    <div class="card"><div class="row"><h2>Active Master List</h2><input id="master-search" class="search" placeholder="Search items"></div><div id="master-list" class="list" style="margin-top:12px"></div></div>
+  </section>
+
+  <section id="page-restock" class="section hidden">
+    <div class="card"><h2>Restock Suggestions</h2><p class="muted">An item appears here only when it is absent from all six racks and the fridge. Hide moves it out of the active Master List.</p><div id="restock-list" class="list"></div></div>
+  </section>
+
+  <section id="page-hidden" class="section hidden">
+    <div class="card"><h2>Hide List</h2><p class="muted">These items are excluded from the active Master List and restock suggestions. Restore an item if you want to track it again.</p><div id="hidden-list" class="list"></div></div>
+  </section>
+  <p class="muted" style="text-align:center;margin:22px 0">Data is stored in your connected Google Sheet.</p>
+</main>
+<script>
+  const state = { data:null, page:'dashboard', busy:false };
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const statusFor = (itemId, location) => state.data.statuses.find(s => s.itemId === itemId && s.location === location) || {itemId,location,present:false,expiryDate:''};
+  const presentSomewhere = id => state.data.statuses.some(s => s.itemId === id && s.present);
+  const restockItems = () => state.data.items.filter(i => !presentSomewhere(i.itemId));
+  function notify(message, type='ok') { const n=$('notice'); n.textContent=message; n.className='notice'+(type==='error'?' error':type==='warning'?' warning':''); n.classList.remove('hidden'); window.scrollTo({top:0,behavior:'smooth'}); }
+  function setBusy(b) { state.busy=b; document.querySelectorAll('button').forEach(btn=>btn.disabled=b); }
+  function callServer(method, payload, successMessage) {
+    setBusy(true);
+    google.script.run.withSuccessHandler(data => { state.data=data; renderAll(); setBusy(false); if(successMessage) notify(successMessage); })
+      .withFailureHandler(err => { setBusy(false); notify(err && err.message ? err.message : String(err), 'error'); })[method](payload);
+  }
+  function loadData() {
+    setBusy(true);
+    google.script.run.withSuccessHandler(data=>{state.data=data;setBusy(false);renderAll();})
+      .withFailureHandler(err=>{setBusy(false);notify(err&&err.message?err.message:String(err),'error');}) .getInitialData();
+  }
+  function go(page) {
+    state.page=page;
+    document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.page===page));
+    document.querySelectorAll('main > section').forEach(s=>s.classList.toggle('hidden',s.id!=='page-'+page));
+    if(page==='shelves') renderShelf();
+    if(page==='master') renderMaster();
+  }
+  document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>go(b.dataset.page)));
+  function expiryItems() {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const limit = new Date(today); limit.setDate(limit.getDate()+30);
+    return state.data.statuses.filter(s=>s.present && s.expiryDate).map(s=>{
+      const d=new Date(s.expiryDate+'T12:00:00'); const item=state.data.items.find(i=>i.itemId===s.itemId);
+      return item ? {...s,name:item.name,days:Math.ceil((d-today)/86400000)} : null;
+    }).filter(x=>x && x.days<=30).sort((a,b)=>a.days-b.days);
+  }
+  function expiryRow(x) {
+    const label=x.days<0?`Expired ${Math.abs(x.days)} day(s) ago`:x.days===0?'Expires today':`Expires in ${x.days} day(s)`;
+    return `<div class="item"><div class="item-main"><strong>${esc(x.name)}</strong><div class="muted">${esc(x.location)} · ${esc(x.expiryDate)}</div></div><span class="pill ${x.days<0?'warning':''}">${esc(label)}</span></div>`;
+  }
+  function restockRow(item, compact=false) {
+    return `<div class="item"><div class="item-main"><strong>${esc(item.name)}</strong><div class="muted">${esc(item.category||'Uncategorised')} · Not present in any location</div></div><button class="danger" data-hide="${esc(item.itemId)}">${compact?'Hide':'Hide item'}</button></div>`;
+  }
+  function renderAll() {
+    if(!state.data)return;
+    const expiry=expiryItems(), restock=restockItems();
+    $('metric-present').textContent=state.data.items.filter(presentSomewhere).length;
+    $('metric-expiry').textContent=expiry.length;
+    $('metric-restock').textContent=restock.length;
+    $('dashboard-expiry').innerHTML=expiry.length?expiry.slice(0,5).map(expiryRow).join(''):'<div class="empty">No upcoming expiries in the next 30 days.</div>';
+    $('dashboard-restock').innerHTML=restock.length?restock.slice(0,5).map(x=>restockRow(x,true)).join(''):'<div class="empty">No restock suggestions right now.</div>';
+    $('restock-list').innerHTML=restock.length?restock.map(x=>restockRow(x)).join(''):'<div class="empty">No restock suggestions right now.</div>';
+    $('hidden-list').innerHTML=state.data.hiddenItems.length?state.data.hiddenItems.map(x=>`<div class="item"><div class="item-main"><strong>${esc(x.name)}</strong><div class="muted">${esc(x.category||'Uncategorised')} · Hidden</div></div><button class="secondary" data-restore="${esc(x.itemId)}">Restore</button></div>`).join(''):'<div class="empty">Your Hide List is empty.</div>';
+    $('location-select').innerHTML=state.data.locations.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
+    $('item-suggestions').innerHTML=state.data.items.map(x=>`<option value="${esc(x.name)}"></option>`).join('');
+    renderMaster(); renderShelf();
+    document.querySelectorAll('[data-hide]').forEach(b=>b.onclick=()=>{if(confirm('Move this item from the Master List to the Hide List?')) callServer('hideItem',b.dataset.hide,'Item moved to Hide List.');});
+    document.querySelectorAll('[data-restore]').forEach(b=>b.onclick=()=>{if(confirm('Restore this item to the active Master List?')) callServer('restoreItem',b.dataset.restore,'Item restored to Master List.');});
+  }
+  function renderMaster() {
+    if(!state.data)return;
+    const q=($('master-search').value||'').trim().toLowerCase();
+    const items=state.data.items.filter(x=>x.name.toLowerCase().includes(q));
+    $('master-list').innerHTML=items.length?items.map(x=>`<div class="item"><div class="item-main"><strong>${esc(x.name)}</strong><div class="muted">${esc(x.category||'Uncategorised')}</div></div><span class="pill">${presentSomewhere(x.itemId)?'Present':'Needs restock'}</span></div>`).join(''):'<div class="empty">No matching active items.</div>';
+  }
+  function renderShelf() {
+    if(!state.data)return;
+    const loc=$('location-select').value||state.data.locations[0];
+    const q=($('shelf-search').value||'').trim().toLowerCase();
+    const items=state.data.items.filter(x=>x.name.toLowerCase().includes(q));
+    $('shelf-count').textContent=`${items.length} item(s) · ${loc}`;
+    $('shelf-list').innerHTML=items.length?items.map(item=>{
+      const s=statusFor(item.itemId,loc);
+      return `<div class="item"><div class="status-row"><label style="display:flex;align-items:center;gap:10px;color:var(--ink);font-size:15px"><input class="present" type="checkbox" data-present="${esc(item.itemId)}" ${s.present?'checked':''}><span><strong>${esc(item.name)}</strong><span class="muted" style="display:block">${esc(item.category||'Uncategorised')}</span></span></label><label>Expiry date (optional)<input class="exp-date" type="date" data-expiry="${esc(item.itemId)}" value="${esc(s.expiryDate||'')}"></label></div></div>`;
+    }).join(''):'<div class="empty">Add items to the Master List first.</div>';
+  }
+  $('location-select').addEventListener('change',renderShelf);
+  $('shelf-search').addEventListener('input',renderShelf);
+  $('master-search').addEventListener('input',renderMaster);
+  $('save-review').addEventListener('click',()=>{
+    const location=$('location-select').value;
+    const entries=state.data.items.map(item=>{
+      const presentInput=document.querySelector(`[data-present="${CSS.escape(item.itemId)}"]`);
+      const expiryInput=document.querySelector(`[data-expiry="${CSS.escape(item.itemId)}"]`);
+      const saved=statusFor(item.itemId,location);
+      // If search filtering hides an item, preserve its previously saved status.
+      return {
+        itemId:item.itemId,
+        present:presentInput ? presentInput.checked : saved.present,
+        expiryDate:expiryInput ? expiryInput.value : (saved.expiryDate||'')
+      };
+    });
+    callServer('saveLocationReview',{location,entries},`${location} review saved.`);
+  });
+  $('add-form').addEventListener('submit',e=>{
+    e.preventDefault();
+    const name=$('new-name').value.trim(), category=$('new-category').value.trim();
+    const existing=state.data.items.find(x=>x.name.toLowerCase()===name.toLowerCase());
+    if(existing){notify('This item already exists in the Master List. Select it from the suggestions instead.','warning');return;}
+    callServer('addItem',{name,category},'Item added to Master List.');
+    $('add-form').reset();
+  });
+  loadData();
+</script>
+</body>
+</html>

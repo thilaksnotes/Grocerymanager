@@ -281,8 +281,8 @@
     $('browse-location').value=state.data.locations.includes(previousBrowseLocation)?previousBrowseLocation:'all';
     $('item-suggestions').innerHTML=state.data.items.map(x=>`<option value="${esc(x.name)}"></option>`).join('');
     renderMaster(); renderShelf(); renderBrowse();
-    document.querySelectorAll('[data-hide]').forEach(b=>b.onclick=()=>{if(confirm('Move this item from the Master List to the Hide List?')) callServer('hideItem',b.dataset.hide,'Item moved to Hide List.');});
-    document.querySelectorAll('[data-restore]').forEach(b=>b.onclick=()=>{if(confirm('Restore this item to the active Master List?')) callServer('restoreItem',b.dataset.restore,'Item restored to Master List.');});
+    document.querySelectorAll('[data-hide]').forEach(b=>b.onclick=()=>{if(confirm('Move this item from the Master List to the Hide List?')) callServer('hideItem',{itemId:b.dataset.hide},'Item moved to Hide List.');});
+    document.querySelectorAll('[data-restore]').forEach(b=>b.onclick=()=>{if(confirm('Restore this item to the active Master List?')) callServer('restoreItem',{itemId:b.dataset.restore},'Item restored to Master List.');});
   }
   function renderMaster() {
     if(!state.data)return;

@@ -318,8 +318,11 @@
     if(!row)return;
     const loc=row.querySelector('.entry-location').value;
     const saved=statusFor(itemId,loc);
+    // Changing the selected shelf should not erase the expiry date currently entered.
+    // If the destination shelf already has an expiry date, use it only when the input is blank.
     row.querySelector('.present').checked=!!saved.present;
-    row.querySelector('.exp-date').value=saved.expiryDate||'';
+    const expiryInput=row.querySelector('.exp-date');
+    if (!expiryInput.value && saved.expiryDate) expiryInput.value=saved.expiryDate;
     sortShelfEntries();
   }
   function renderBrowse() {
@@ -364,28 +367,25 @@
   });
   $('save-review').addEventListener('click',async()=>{
     if(!state.data || state.busy)return;
-    const draft=new Map();
+    const draft=[];
     document.querySelectorAll('.shelf-entry').forEach(row=>{
-      const id=row.dataset.itemId;
-      draft.set(id,{location:row.querySelector('.entry-location').value,present:row.querySelector('.present').checked,expiryDate:row.querySelector('.exp-date').value});
+      draft.push({
+        itemId:row.dataset.itemId,
+        location:row.querySelector('.entry-location').value,
+        present:row.querySelector('.present').checked,
+        expiryDate:row.querySelector('.exp-date').value || ''
+      });
     });
-    const locations=state.data.locations;
-    setBusy(true,'Preparing weekly shelf report…');
-    let savedCount=0;
+    setBusy(true,`Saving weekly report for ${draft.length} items in one batch…`);
     try{
-      for(let i=0;i<locations.length;i++){
-        const location=locations[i];
-        const entries=state.data.items.map(item=>{
-          const old=statusFor(item.itemId,location);
-          const changed=draft.get(item.itemId);
-          return {itemId:item.itemId,present:changed && changed.location===location?changed.present:old.present,expiryDate:changed && changed.location===location?changed.expiryDate:(old.expiryDate||'')};
-        });
-        setLoadingStatus(`Saving shelf ${i+1} of ${locations.length}: ${location}`);
-        state.data=await apiMutate('saveLocationReview',{location,entries});
-        savedCount++;
-      }
-      renderAll();setBusy(false);notify(`Weekly report saved for all ${savedCount} storage locations. Please verify the results in My Shelves.`);
-    }catch(err){setBusy(false);renderAll();notify(`Saved ${savedCount} of ${locations.length} shelf reports before an error. ${err && err.message ? err.message : String(err)} Reload to verify before retrying.`,'error');}
+      // One API mutation for all item/location selections, followed by one read to verify.
+      state.data=await apiMutate('saveWeeklyReview',{entries:draft});
+      renderAll();setBusy(false);
+      notify(`Weekly report saved for ${draft.length} items in one batch.`);
+    }catch(err){
+      setBusy(false);renderAll();
+      notify(`Could not confirm the weekly report save. ${err && err.message ? err.message : String(err)} Reload to verify before retrying.`,'error');
+    }
   });
   let addRowCounter=0;
   function addMasterRow(name='') {

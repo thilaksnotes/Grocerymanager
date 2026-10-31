@@ -85,7 +85,12 @@
   <section id="page-shelves" class="section hidden">
     <div class="card">
       <div class="row"><div><h2>Weekly shelf review</h2><div class="muted">Choose a storage location for each item, update presence and expiry dates, then save.</div></div></div>
-      <div class="row" style="margin:16px 0 10px"><span id="shelf-count" class="item-count"></span><input id="shelf-search" class="search" placeholder="Search items in master list"><button id="save-review" type="button">Save weekly report</button></div>
+      <div class="form" style="grid-template-columns:minmax(170px,1fr) minmax(180px,2fr) auto; margin:16px 0 10px">
+        <label>Review location<select id="shelf-location-filter"><option value="all">All locations</option></select></label>
+        <label>Search items<input id="shelf-search" class="search" placeholder="Search items in master list"></label>
+        <button id="save-review" type="button">Save weekly report</button>
+      </div>
+      <div class="row" style="margin-bottom:10px"><span id="shelf-count" class="item-count"></span></div>
       <div id="shelf-list" class="list"></div>
       <div class="row" style="margin-top:15px"><span class="muted">Unchecked items appear first. Items are sorted alphabetically within each group.</span></div>
     </div>
@@ -279,6 +284,9 @@
     const previousBrowseLocation=$('browse-location').value||'all';
     $('browse-location').innerHTML='<option value="all">All shelves</option>'+state.data.locations.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
     $('browse-location').value=state.data.locations.includes(previousBrowseLocation)?previousBrowseLocation:'all';
+    const previousShelfLocation=$('shelf-location-filter').value||'all';
+    $('shelf-location-filter').innerHTML='<option value="all">All locations</option>'+state.data.locations.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
+    $('shelf-location-filter').value=state.data.locations.includes(previousShelfLocation)?previousShelfLocation:'all';
     $('item-suggestions').innerHTML=state.data.items.map(x=>`<option value="${esc(x.name)}"></option>`).join('');
     renderMaster(); renderShelf(); renderBrowse();
     document.querySelectorAll('[data-hide]').forEach(b=>b.onclick=()=>{if(confirm('Move this item from the Master List to the Hide List?')) callServer('hideItem',{itemId:b.dataset.hide},'Item moved to Hide List.');});
@@ -292,12 +300,7 @@
   }
   function renderShelf() {
     if(!state.data)return;
-    const q=($('shelf-search').value||'').trim().toLowerCase();
-    const items=state.data.items.filter(x=>x.name.toLowerCase().includes(q)).sort((a,b)=>{
-      const ap=presentSomewhere(a.itemId), bp=presentSomewhere(b.itemId);
-      return Number(ap)-Number(bp) || a.name.localeCompare(b.name);
-    });
-    $('shelf-count').textContent=`${items.length} item(s) · all storage locations`;
+    const items=state.data.items.slice().sort((a,b)=>a.name.localeCompare(b.name));
     $('shelf-list').innerHTML=items.length?items.map(item=>{
       const savedLocation=state.data.locations.find(loc=>statusFor(item.itemId,loc).present) || state.data.locations[0];
       const s=statusFor(item.itemId,savedLocation);
@@ -305,13 +308,31 @@
       return `<div class="item shelf-entry" data-item-name="${esc(item.name.toLowerCase())}" data-item-id="${esc(item.itemId)}"><div class="status-row"><label style="display:flex;align-items:center;gap:10px;color:var(--ink);font-size:15px"><input class="present" type="checkbox" data-present="${esc(item.itemId)}" ${s.present?'checked':''}><span><strong>${esc(item.name)}</strong></span></label><label>Storage location<select class="entry-location" data-location-for="${esc(item.itemId)}">${opts}</select></label><label>Expiry date (optional)<input class="exp-date" type="date" data-expiry="${esc(item.itemId)}" value="${esc(s.expiryDate||'')}"></label></div></div>`;
     }).join(''):'<div class="empty">Add items to the Master List first.</div>';
     sortShelfEntries();
+    applyShelfFilters();
   }
   function sortShelfEntries(){
     const list=$('shelf-list');
     [...list.querySelectorAll('.shelf-entry')].sort((a,b)=>{
       const ac=a.querySelector('.present').checked, bc=b.querySelector('.present').checked;
-      return Number(ac)-Number(bc) || a.dataset.itemName.localeCompare(b.dataset.itemName);
+      return Number(bc)-Number(ac) || a.dataset.itemName.localeCompare(b.dataset.itemName);
     }).forEach(el=>list.appendChild(el));
+  }
+  function applyShelfFilters(){
+    const location=$('shelf-location-filter').value||'all';
+    const q=($('shelf-search').value||'').trim().toLowerCase();
+    const rows=[...$('shelf-list').querySelectorAll('.shelf-entry')];
+    let visible=0, checked=0, unchecked=0;
+    rows.forEach(row=>{
+      const matchesLocation=location==='all'||row.querySelector('.entry-location').value===location;
+      const matchesSearch=row.dataset.itemName.includes(q);
+      const show=matchesLocation&&matchesSearch;
+      row.classList.toggle('hidden',!show);
+      if(show){
+        visible++;
+        if(row.querySelector('.present').checked)checked++;else unchecked++;
+      }
+    });
+    $('shelf-count').textContent=`${visible} item(s) · ${checked} checked · ${unchecked} unchecked${location==='all'?' · All locations':' · '+location}`;
   }
   function refreshShelfEntry(itemId){
     const row=[...document.querySelectorAll('.shelf-entry')].find(el=>el.dataset.itemId===itemId);
@@ -324,6 +345,7 @@
     const expiryInput=row.querySelector('.exp-date');
     if (!expiryInput.value && saved.expiryDate) expiryInput.value=saved.expiryDate;
     sortShelfEntries();
+    applyShelfFilters();
   }
   function renderBrowse() {
     if(!state.data)return;
@@ -357,13 +379,14 @@
 
   $('browse-location').addEventListener('change',renderBrowse);
   $('browse-search').addEventListener('input',renderBrowse);
-  $('shelf-search').addEventListener('input',renderShelf);
+  $('shelf-search').addEventListener('input',applyShelfFilters);
+  $('shelf-location-filter').addEventListener('change',applyShelfFilters);
   $('master-search').addEventListener('input',renderMaster);
   $('shelf-list').addEventListener('change',e=>{
     const row=e.target.closest('.shelf-entry');
     if(!row)return;
     if(e.target.matches('.entry-location')) refreshShelfEntry(row.dataset.itemId);
-    else if(e.target.matches('.present')) sortShelfEntries();
+    else if(e.target.matches('.present')) { sortShelfEntries(); applyShelfFilters(); }
   });
   $('save-review').addEventListener('click',async()=>{
     if(!state.data || state.busy)return;
